@@ -1,0 +1,5 @@
+source_file_depth: 1
+trim_path: 1
+output_dir: SKIP_outputs
+video_format: mp4
+n_workers: 4

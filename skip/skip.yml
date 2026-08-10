@@ -1,0 +1,78 @@
+alpha: 0.2
+extraction_config:
+- extraction_method:
+    args:
+      direction: top
+      trim: 1
+    func: contour
+  extraction_object: mask
+  structure: GH
+- extraction_method:
+    args:
+      criteria:
+      - y
+      - max
+    func: anchoring_point
+  extraction_object: coordinates
+  structure: HB
+- extraction_method:
+    args:
+      direction: top
+    func: contour
+  extraction_object: mask
+  structure: TB
+frame_time: 0.034896713
+viz_config:
+  interval: 66
+  structures:
+    GH:
+      kineseq:
+        criteria: max
+        disp_func: curve_diff
+        disp_only: true
+        landmarks:
+          max: positive peak
+          offset: positive peak
+          onset: negative peak
+        ma_window: 3
+      plot:
+        lines:
+        - label: curvature
+          param: disp
+        max_title: Maximum Contraction
+        title: Geniohyoid Muscle Contraction
+        unit: Curvature ($mm^{-1}$)
+    HB:
+      kineseq:
+        disp_func: dist_from_orig
+        landmarks:
+          max: negative peak
+          offset: positive peak
+          onset: positive peak
+        ma_window: 3
+      plot:
+        lines:
+        - label: acceleration
+          param: a
+        max_title: Maximum Displacement
+        title: Hyoid Bone Displacement
+        unit: Magnitude (mm)
+    TB:
+      kineseq:
+        criteria: max
+        dfargs:
+          use_high_point: true
+        disp_func: curve_diff
+        disp_only: true
+        landmarks:
+          max: positive peak
+          offset: positive peak
+          onset: negative peak
+        ma_window: 3
+      plot:
+        lines:
+        - label: curvature
+          param: disp
+        max_title: Maximum Retraction
+        title: Tongue Base Retraction
+        unit: Curvature ($mm^{-1}$)
