@@ -1,2 +1,4 @@
 # build files
 app/build/.
+
+.DS_Store
