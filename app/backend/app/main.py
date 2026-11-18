@@ -26,7 +26,7 @@ WORK = ROOT / ".pyrestus-jobs"
 WEB = ROOT / "app" / "build" / "web"
 DEFAULT = Path.home() / "Documents" / "Pyrestus Results"
 
-DICOM_EXT = {".dcm", ".dicom"}
+DICOM_EXT = {".dcm", ".dicom", ""}
 VIDEO_EXT = {".avi", ".mp4", ".mov", ".mkv"}
 ALLOWED_EXT = DICOM_EXT | VIDEO_EXT
 CHUNK = 1024 * 1024  # 1 MB upload chunks
@@ -173,13 +173,13 @@ def to_uint8(frame: np.ndarray) -> np.ndarray:
 
 def write_frame(frame: np.ndarray, out: Path, index: int, fmt: str) -> None:
     frame = to_uint8(np.asarray(frame))
-    if frame.ndim == 3:
-        if frame.shape[2] == 4:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2GRAY)
-        elif frame.shape[2] == 3:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        else:
-            frame = frame[..., 0]
+    # if frame.ndim == 3:
+    #     if frame.shape[2] == 4:
+    #         frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2GRAY)
+    #     elif frame.shape[2] == 3:
+    #         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    #     else:
+    #         frame = frame[..., 0]
     params = [cv2.IMWRITE_JPEG_QUALITY, 95] if fmt == "jpg" else []
     if not cv2.imwrite(str(out / f"{index:04d}.{fmt}"), frame, params):
         raise RuntimeError(f"Could not write frame {index} to {out}")

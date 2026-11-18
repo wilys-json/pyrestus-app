@@ -37,7 +37,6 @@ class _UsvState extends State<Usv> {
         _ => JobStatus.idle,
       };
 
-
   @override
   void dispose() {
     timer?.cancel();
@@ -123,7 +122,6 @@ class _UsvState extends State<Usv> {
     return data['selected'] == true ? data['path'] as String? : null;
   }
 
-
   // ------------------------------------------------------------ processing
 
   Future<void> start() async {
@@ -188,30 +186,32 @@ class _UsvState extends State<Usv> {
     }
   }
 
-
-    /// Extracts FastAPI's `detail` message (string or validation list).
+  /// Extracts FastAPI's `detail` message (string or validation list).
   String _detail(String body, int code) {
     try {
       final d = (jsonDecode(body) as Map<String, dynamic>)['detail'];
       if (d is String) return d;
       if (d is List && d.isNotEmpty) {
-        return (d.first as Map<String, dynamic>)['msg']?.toString() ?? 'HTTP $code';
+        return (d.first as Map<String, dynamic>)['msg']?.toString() ??
+            'HTTP $code';
       }
     } catch (_) {}
     return 'HTTP $code';
   }
 
-
   Future<void> poll() async {
     if (id == null || polling) return; // no overlapping requests
+    final pollingId = id;
     polling = true;
     try {
-      final res = await http.get(Uri.parse('$api/jobs/$id'));
-      if (res.statusCode >= 400 || !mounted) return;
+      final res = await http.get(Uri.parse('$api/jobs/$pollingId'));
+      // Ignore late responses that arrive after the user pressed X.
+      if (res.statusCode >= 400 || !mounted || id != pollingId) return;
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       setState(() => state = data);
       if (status == JobStatus.completed || status == JobStatus.failed) {
         timer?.cancel();
+        timer = null;
       }
     } catch (_) {
       // Transient local failure: keep polling.
@@ -229,13 +229,18 @@ class _UsvState extends State<Usv> {
     }
   }
 
+  /// Clears the finished job so a new conversion can start without a refresh.
+  /// Output folder and format are kept for the next round.
   void reset() {
+    if (status == JobStatus.running) return; // don't reset mid-job
     timer?.cancel();
+    timer = null;
     setState(() {
-      files.clear();
+      files.clear(); // remove this line to reuse the same files
       id = null;
-      state = null;
+      state = null; // -> status becomes idle -> Start button reappears
       notice = '';
+      busy = false;
     });
   }
 
@@ -264,7 +269,9 @@ class _UsvState extends State<Usv> {
               ),
               if (notice.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                _Banner(message: notice, onClose: () => setState(() => notice = '')),
+                _Banner(
+                    message: notice,
+                    onClose: () => setState(() => notice = '')),
               ],
               const SizedBox(height: 20),
 
@@ -297,12 +304,14 @@ class _UsvState extends State<Usv> {
                         OutlinedButton.icon(
                           onPressed: locked ? null : pickFiles,
                           icon: const Icon(Icons.add),
-                          label: Text(files.isEmpty ? 'Choose files' : 'Add more'),
+                          label: Text(
+                              files.isEmpty ? 'Choose files' : 'Add more'),
                         ),
                         if (files.isNotEmpty) ...[
                           const SizedBox(width: 8),
                           TextButton(
-                            onPressed: locked ? null : () => setState(files.clear),
+                            onPressed:
+                                locked ? null : () => setState(files.clear),
                             child: const Text('Clear all'),
                           ),
                         ],
@@ -397,6 +406,8 @@ class _UsvState extends State<Usv> {
     final job = state!;
     final done = (job['files_completed'] ?? 0) as num;
     final total = (job['total_files'] ?? 0) as num;
+    final finished =
+        status == JobStatus.completed || status == JobStatus.failed;
 
     final (color, icon, title) = switch (status) {
       JobStatus.completed => (
@@ -416,14 +427,20 @@ class _UsvState extends State<Usv> {
       color: color,
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.fromLTRB(18, 10, 10, 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
               Icon(icon),
               const SizedBox(width: 8),
-              Text(title, style: theme.textTheme.titleLarge),
+              Expanded(child: Text(title, style: theme.textTheme.titleLarge)),
+              if (finished)
+                IconButton(
+                  tooltip: 'Close and start a new conversion',
+                  icon: const Icon(Icons.close),
+                  onPressed: reset,
+                ),
             ]),
             const SizedBox(height: 8),
             Text(status == JobStatus.failed
@@ -433,21 +450,31 @@ class _UsvState extends State<Usv> {
               const SizedBox(height: 12),
               LinearProgressIndicator(value: total == 0 ? null : done / total),
               const SizedBox(height: 4),
-              Text('$done of $total files', style: theme.textTheme.bodySmall),
+              Text(
+                '$done of $total files  ·  ${job['frames_created'] ?? 0} frames so far',
+                style: theme.textTheme.bodySmall,
+              ),
             ],
             if (status == JobStatus.completed) ...[
               const SizedBox(height: 4),
               Text('$done of $total files processed, '
                   '${job['frames_created'] ?? 0} frames saved.'),
             ],
-            if (status == JobStatus.running) ...[
+            if (finished) ...[
               const SizedBox(height: 12),
-              LinearProgressIndicator(value: total == 0 ? null : done / total),
-              const SizedBox(height: 4),
-              Text(
-                '$done of $total files  ·  ${job['frames_created'] ?? 0} frames so far',
-                style: theme.textTheme.bodySmall,
-              ),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                if (status == JobStatus.completed)
+                  OutlinedButton.icon(
+                    onPressed: openOutputFolder,
+                    icon: const Icon(Icons.folder_open),
+                    label: const Text('Open folder'),
+                  ),
+                FilledButton.icon(
+                  onPressed: reset,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('New conversion'),
+                ),
+              ]),
             ],
           ],
         ),
@@ -503,7 +530,8 @@ class _Step extends StatelessWidget {
                   ? theme.colorScheme.primary
                   : theme.colorScheme.surfaceContainerHighest,
               child: done
-                  ? Icon(Icons.check, size: 16, color: theme.colorScheme.onPrimary)
+                  ? Icon(Icons.check,
+                      size: 16, color: theme.colorScheme.onPrimary)
                   : Text('$number', style: theme.textTheme.labelLarge),
             ),
             const SizedBox(width: 14),
@@ -542,7 +570,8 @@ class _Banner extends StatelessWidget {
           Icon(Icons.warning_amber, color: c.onErrorContainer),
           const SizedBox(width: 10),
           Expanded(
-              child: Text(message, style: TextStyle(color: c.onErrorContainer))),
+              child:
+                  Text(message, style: TextStyle(color: c.onErrorContainer))),
           IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
         ]),
       ),
